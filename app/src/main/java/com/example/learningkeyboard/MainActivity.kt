@@ -6,6 +6,8 @@ import android.os.*
 import android.view.*
 import android.view.inputmethod.EditorInfo
 import android.widget.*
+import java.io.File
+import java.io.FileOutputStream
 import kotlin.math.atan2
 import kotlin.math.hypot
 
@@ -45,6 +47,46 @@ class MainActivity : InputMethodService() {
         val tones = mapOf("a" to "áàảãạ", "â" to "ấầẩẫậ", "ă" to "ắằẳẵặ", "e" to "éèẻẽẹ", "ê" to "ếềểễệ", "i" to "íìỉĩị", "o" to "óòỏõọ", "ô" to "ốồổỗộ", "ơ" to "ớờởỡợ", "u" to "úùủũụ", "ư" to "ứừửữự", "y" to "ýỳỷỹỵ")
     }
 
+    companion object {
+        init {
+            System.loadLibrary("learningkeyboard")
+        }
+    }
+
+    private external fun initNativeBridge(tokenizerPath: String, encoderPath: String, decoderPath: String)
+    private external fun translateNative(input: String): String
+
+    override fun onCreate() {
+        super.onCreate()
+        prepareModels()
+    }
+
+    private fun prepareModels() {
+        Thread {
+            try {
+                val tokenizerPath = copyAssetToInternalStorage("tokenizer.onnx")
+                val encoderPath = copyAssetToInternalStorage("encoder_model.onnx")
+                val decoderPath = copyAssetToInternalStorage("decoder_model.onnx")
+                copyAssetToInternalStorage("decoder_model.onnx_data")
+                initNativeBridge(tokenizerPath, encoderPath, decoderPath)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }.start()
+    }
+
+    private fun copyAssetToInternalStorage(fileName: String): String {
+        val file = File(filesDir, fileName)
+        if (!file.exists()) {
+            assets.open(fileName).use { input ->
+                FileOutputStream(file).use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }
+        return file.absolutePath
+    }
+
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         isShifted = false
@@ -62,7 +104,7 @@ class MainActivity : InputMethodService() {
             layoutParams = FrameLayout.LayoutParams(-1, 0, Gravity.BOTTOM)
             setBackgroundColor(0x44000000.toInt())
             visibility = View.INVISIBLE
-            isHapticFeedbackEnabled = true
+            // Vibration removed: isHapticFeedbackEnabled = false
             setOnTouchListener { v, e ->
                 if (e.action == MotionEvent.ACTION_DOWN) {
                     v.performClick()
@@ -71,7 +113,7 @@ class MainActivity : InputMethodService() {
                 if (e.action == MotionEvent.ACTION_UP) {
                     val dx = e.x - startX; val dy = e.y - startY
                     currentMarks.add(if (hypot(dx, dy) > 30) classifyStroke(dx, dy) else Mark.TAP)
-                    v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
+                    // Vibration removed: performHapticFeedback call deleted
                     updatePreviewText()
                 }
                 true
@@ -97,12 +139,16 @@ class MainActivity : InputMethodService() {
                 val weight = when { key == "SPACE" -> 3f; rIdx >= 2 && (kIdx == 0 || kIdx == row.size - 1) -> 1.5f; else -> 1f }
                 val btn = Button(this).apply {
                     isAllCaps = false; tag = key; setTextColor(Color.WHITE); textSize = 14f; setPadding(0,0,0,0)
-                    isHapticFeedbackEnabled = true
-                    layoutParams = LinearLayout.LayoutParams(0, -2, weight).apply { setMargins(1,1,1,1) }
+                    // Vibration removed: isHapticFeedbackEnabled = false
+                    
+                    // Increased key height to 64dp
+                    val heightPx = (52 * resources.displayMetrics.density).toInt()
+                    layoutParams = LinearLayout.LayoutParams(0, heightPx, weight).apply { setMargins(1,1,1,1) }
+                    
                     setOnTouchListener { v, e -> 
                         if (e.action == MotionEvent.ACTION_DOWN) {
                             v.performClick()
-                            v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
+                            // Vibration removed: performHapticFeedback call deleted
                         }
                         handlePrimaryTouch(key, e); true 
                     }
