@@ -56,4 +56,5 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.23.2") //latest.release
     implementation("com.microsoft.onnxruntime:onnxruntime-extensions-android:0.13.0") //latest.release
+    implementation("com.google.mlkit:translate:17.0.2")
 }
