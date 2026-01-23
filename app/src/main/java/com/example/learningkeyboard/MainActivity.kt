@@ -18,6 +18,7 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 
 class MainActivity : InputMethodService() {
+
     private var currentPage = 1
     private var isShifted = false
     private lateinit var keyboardRoot: LinearLayout
@@ -27,6 +28,7 @@ class MainActivity : InputMethodService() {
     private val handler = Handler(Looper.getMainLooper())
     private var deleteRunnable: Runnable? = null
     private var gestureDelayRunnable: Runnable? = null
+    private var translateRunnable: Runnable? = null
 
     private var primaryHeldKey: String? = null
     private val currentMarks = mutableListOf<Mark>()
@@ -140,27 +142,49 @@ class MainActivity : InputMethodService() {
             ic.getTextBeforeCursor(100, 0)?.toString() ?: ""
         }
 
+        // 1. UPDATE PREVIEW (Plain Text, no styling)
+        if (::translationInputView.isInitialized) {
+            if (textToTranslate.isNotBlank()) {
+                translationInputView.visibility = View.VISIBLE
+                translationInputView.text = textToTranslate
+                translationInputView.setTextColor(Color.WHITE)
+            } else {
+                translationInputView.visibility = if (isTranslationMode) View.VISIBLE else View.GONE
+                translationInputView.text = ""
+            }
+        }
+
+        // 2. SCHEDULE TRANSLATION
+        translateRunnable?.let { handler.removeCallbacks(it) }
+
         if (textToTranslate.isNotBlank()) {
             if (!isModelDownloaded && ::translationResult.isInitialized) {
-                 translationResult.text = "Lade Modell & übersetze..."
-                 translationResult.setTextColor(Color.YELLOW)
+                 translationResult.text = "Lade Modell..."
+                 translationResult.setTextColor(Color.LTGRAY)
             }
 
-            translator.translate(textToTranslate)
-                .addOnSuccessListener { result ->
-                    if (::translationResult.isInitialized) {
-                        translationResult.text = result
-                        translationResult.setTextColor(Color.CYAN)
+            // Create a new task to run after delay
+            translateRunnable = Runnable {
+                 translator.translate(textToTranslate)
+                    .addOnSuccessListener { result ->
+                        if (::translationResult.isInitialized) {
+                            // Removed mastery logic and styling. Just showing plain result.
+                            translationResult.text = result
+                            translationResult.setTextColor(Color.LTGRAY)
+                        }
                     }
-                }
-                .addOnFailureListener { e ->
-                    if (::translationResult.isInitialized) {
-                        translationResult.text = "Fehler: ${e.localizedMessage}"
-                        translationResult.setTextColor(Color.RED)
+                    .addOnFailureListener { e ->
+                        if (::translationResult.isInitialized) {
+                            translationResult.text = "Fehler: ${e.localizedMessage}"
+                            translationResult.setTextColor(Color.RED)
+                        }
                     }
-                }
+            }
+            // Wait 1000ms before translating
+            handler.postDelayed(translateRunnable!!, 1000)
         } else {
-            if (::translationResult.isInitialized) {
+            // If text is empty, clear result immediately (no delay needed)
+             if (::translationResult.isInitialized) {
                 if (isTranslationMode) {
                     translationResult.text = "Tippe zum Übersetzen..."
                     translationResult.setTextColor(Color.GRAY)
@@ -190,6 +214,10 @@ class MainActivity : InputMethodService() {
         isShifted = false
         updateButtonLabels()
         autoTranslate()
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        super.onFinishInputView(finishingInput)
     }
 
     override fun onCreateInputView(): View {
@@ -446,8 +474,12 @@ class MainActivity : InputMethodService() {
         // Standard Mode
         when (key) {
             "⌫" -> ic.deleteSurroundingText(1, 0)
-            "SPACE" -> ic.commitText(" ", 1)
+            "SPACE" -> {
+                // Removed commented out stats update
+                ic.commitText(" ", 1)
+            }
             "↵" -> {
+                // Removed sentenceSeenWords clear
                 ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                 ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
             }
