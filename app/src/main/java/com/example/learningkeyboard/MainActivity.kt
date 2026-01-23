@@ -233,7 +233,7 @@ class MainActivity : InputMethodService() {
                 val weight = when { key == "SPACE" -> 3f; rIdx >= 2 && (kIdx == 0 || kIdx == row.size - 1) -> 1.5f; else -> 1f }
                 val btn = Button(this).apply {
                     isAllCaps = false; tag = key; setTextColor(Color.WHITE); textSize = 14f; setPadding(0,0,0,0)
-                    val heightPx = (64 * resources.displayMetrics.density).toInt()
+                    val heightPx = (48 * resources.displayMetrics.density).toInt()
                     layoutParams = LinearLayout.LayoutParams(0, heightPx, weight).apply { setMargins(1,1,1,1) }
                     setOnTouchListener { v, e ->
                         if (e.action == MotionEvent.ACTION_DOWN) {
