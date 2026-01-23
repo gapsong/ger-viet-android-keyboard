@@ -70,12 +70,8 @@ class MainActivity : InputMethodService() {
         }
     }
 
-    private external fun initNativeBridge(tokenizerPath: String, encoderPath: String, decoderPath: String)
-    private external fun translateNative(input: String): String
-
     override fun onCreate() {
         super.onCreate()
-        prepareModels()
         setupMLKit()
     }
 
@@ -136,8 +132,6 @@ class MainActivity : InputMethodService() {
     }
 
     private fun autoTranslate() {
-        // if (!isModelDownloaded) return // Don't block. Let translate() handle it or fail.
-
         val textToTranslate = if (isTranslationMode) {
             translationBuffer.toString()
         } else {
@@ -178,19 +172,6 @@ class MainActivity : InputMethodService() {
         }
     }
 
-    private fun prepareModels() {
-        Thread {
-            try {
-                val tokenizerPath = copyAssetToInternalStorage("tokenizer.onnx")
-                val encoderPath = copyAssetToInternalStorage("encoder_model.onnx")
-                val decoderPath = copyAssetToInternalStorage("decoder_model.onnx")
-                copyAssetToInternalStorage("decoder_model.onnx_data")
-                initNativeBridge(tokenizerPath, encoderPath, decoderPath)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }.start()
-    }
 
     private fun copyAssetToInternalStorage(fileName: String): String {
         val file = File(filesDir, fileName)
@@ -242,9 +223,35 @@ class MainActivity : InputMethodService() {
 
     private fun createKeyboardLayout() {
         keyboardRoot.removeAllViews(); buttonList.clear()
-        
+
         // Translation Display Bar
-        val translationBar = LinearLayout(this).apply {
+        keyboardRoot.addView(createTranslationBar())
+
+        Config.layouts[currentPage]?.forEachIndexed { rIdx, row ->
+            val rowL = LinearLayout(this).apply { gravity = Gravity.CENTER_HORIZONTAL; weightSum = 10f }
+            row.forEachIndexed { kIdx, key ->
+                val weight = when { key == "SPACE" -> 3f; rIdx >= 2 && (kIdx == 0 || kIdx == row.size - 1) -> 1.5f; else -> 1f }
+                val btn = Button(this).apply {
+                    isAllCaps = false; tag = key; setTextColor(Color.WHITE); textSize = 14f; setPadding(0,0,0,0)
+                    val heightPx = (64 * resources.displayMetrics.density).toInt()
+                    layoutParams = LinearLayout.LayoutParams(0, heightPx, weight).apply { setMargins(1,1,1,1) }
+                    setOnTouchListener { v, e ->
+                        if (e.action == MotionEvent.ACTION_DOWN) {
+                            v.performClick()
+                        }
+                        handlePrimaryTouch(key, e); true
+                    }
+                }
+                buttonList.add(btn); rowL.addView(btn)
+            }
+            keyboardRoot.addView(rowL)
+        }
+        updateButtonLabels()
+        keyboardRoot.post { overlayView.layoutParams.height = keyboardRoot.height; overlayView.requestLayout() }
+    }
+
+    private fun createTranslationBar(): View {
+        val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(16, 8, 16, 8)
@@ -264,7 +271,7 @@ class MainActivity : InputMethodService() {
             visibility = if (isModelDownloaded) View.GONE else View.VISIBLE
             setOnClickListener { startModelDownload() }
         }
-        translationBar.addView(downloadButton)
+        bar.addView(downloadButton)
 
         // Manual Translation Toggle
         val toggleBtn = TextView(this).apply {
@@ -286,7 +293,7 @@ class MainActivity : InputMethodService() {
                 translationResult.text = if (isTranslationMode) "Tippe zum Übersetzen..." else ""
             }
         }
-        translationBar.addView(toggleBtn)
+        bar.addView(toggleBtn)
 
         // Wrapper for Input and Result
         val textContainer = LinearLayout(this).apply {
@@ -315,30 +322,9 @@ class MainActivity : InputMethodService() {
 
         textContainer.addView(translationInputView)
         textContainer.addView(translationResult)
-        translationBar.addView(textContainer)
-        keyboardRoot.addView(translationBar)
+        bar.addView(textContainer)
 
-        Config.layouts[currentPage]?.forEachIndexed { rIdx, row ->
-            val rowL = LinearLayout(this).apply { gravity = Gravity.CENTER_HORIZONTAL; weightSum = 10f }
-            row.forEachIndexed { kIdx, key ->
-                val weight = when { key == "SPACE" -> 3f; rIdx >= 2 && (kIdx == 0 || kIdx == row.size - 1) -> 1.5f; else -> 1f }
-                val btn = Button(this).apply {
-                    isAllCaps = false; tag = key; setTextColor(Color.WHITE); textSize = 14f; setPadding(0,0,0,0)
-                    val heightPx = (64 * resources.displayMetrics.density).toInt()
-                    layoutParams = LinearLayout.LayoutParams(0, heightPx, weight).apply { setMargins(1,1,1,1) }
-                    setOnTouchListener { v, e -> 
-                        if (e.action == MotionEvent.ACTION_DOWN) {
-                            v.performClick()
-                        }
-                        handlePrimaryTouch(key, e); true 
-                    }
-                }
-                buttonList.add(btn); rowL.addView(btn)
-            }
-            keyboardRoot.addView(rowL)
-        }
-        updateButtonLabels()
-        keyboardRoot.post { overlayView.layoutParams.height = keyboardRoot.height; overlayView.requestLayout() }
+        return bar
     }
 
     private fun updateButtonLabels() {
